@@ -2,5 +2,10 @@
   "product_1765369682498.png": "Rising Helixx",
   "product_1765374719776.jpg": "Hammer",
   "product_1765379820933.jpg": "Pipe",
-  "product_1765379809037.jpg": "Pana 12\""
+  "product_1765379809037.jpg": "Pana 12\"",
+  "_order": [
+    "product_1765374719776.jpg",
+    "product_1765379809037.jpg",
+    "product_1765391727313.jpg"
+  ]
 }
