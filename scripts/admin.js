@@ -1,6 +1,6 @@
 /**
  * Admin Panel Logic
- * Handles image management for store owner
+ * Handles image management with session persistence
  */
 const Admin = {
     isInitialized: false,
@@ -54,15 +54,19 @@ const Admin = {
 
         fileInput.addEventListener('change', (e) => {
             this.handleFiles(e.target.files);
-            fileInput.value = ''; // Reset for same file selection
+            fileInput.value = '';
         });
     },
 
     /**
-     * Check authentication status
+     * Check authentication status - with session persistence
      */
     checkAuth() {
+        // Re-initialize GitHubAPI to check stored token
+        GitHubAPI.init();
+
         if (GitHubAPI.isAuthenticated()) {
+            // Already authenticated from previous session
             this.showManager();
             this.loadProducts();
         } else {
@@ -82,7 +86,6 @@ const Admin = {
             return;
         }
 
-        // Validate token
         const submitBtn = document.querySelector('#loginForm button[type="submit"]');
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<span>Verifying...</span>';
@@ -93,7 +96,7 @@ const Admin = {
             GitHubAPI.setToken(token);
             this.showManager();
             await this.loadProducts();
-            App.showToast('Login successful!', 'success');
+            App.showToast('Login successful! Session saved.', 'success');
         } else {
             App.showToast('Invalid token or no repo access', 'error');
         }
@@ -136,13 +139,18 @@ const Admin = {
             this.metadata = metadata;
 
             if (products.length === 0) {
-                imagesGrid.innerHTML = '<p style="text-align: center; color: var(--gray-500); padding: var(--space-8);">No images yet. Upload your first product!</p>';
+                imagesGrid.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: var(--space-8); color: var(--gray-500);">
+                        <p>No images yet. Upload your first product!</p>
+                        <p style="font-size: var(--font-size-sm); margin-top: var(--space-2);">
+                            Images will be stored in: <code>media/</code> folder
+                        </p>
+                    </div>
+                `;
                 return;
             }
 
             imagesGrid.innerHTML = products.map(product => this.renderImageItem(product)).join('');
-
-            // Attach event listeners
             this.attachImageEventListeners();
 
         } catch (error) {
@@ -156,11 +164,17 @@ const Admin = {
      */
     renderImageItem(product) {
         const displayName = this.metadata[product.name] || '';
+        const isVideo = CONFIG.VIDEO_EXTENSIONS.some(ext =>
+            product.name.toLowerCase().endsWith(`.${ext}`)
+        );
 
         return `
             <div class="image-item" data-filename="${product.name}" data-sha="${product.sha}">
                 <div class="image-preview">
-                    <img src="${product.rawUrl}" alt="${displayName || product.name}">
+                    ${isVideo
+                ? `<video src="${product.rawUrl}" muted loop></video>`
+                : `<img src="${product.rawUrl}" alt="${displayName || product.name}">`
+            }
                 </div>
                 <div class="image-controls">
                     <input 
@@ -171,7 +185,7 @@ const Admin = {
                     >
                     <div class="image-actions">
                         <button class="btn-save" title="Save name">Save</button>
-                        <button class="btn-delete" title="Delete image">Delete</button>
+                        <button class="btn-delete" title="Delete">Delete</button>
                     </div>
                 </div>
             </div>
@@ -190,9 +204,7 @@ const Admin = {
                 const imageItem = btn.closest('.image-item');
                 const filename = imageItem.dataset.filename;
                 const input = imageItem.querySelector('.image-name-input');
-                const newName = input.value.trim();
-
-                await this.saveImageName(filename, newName, btn);
+                await this.saveImageName(filename, input.value.trim(), btn);
             });
         });
 
@@ -216,7 +228,6 @@ const Admin = {
                     const imageItem = input.closest('.image-item');
                     const filename = imageItem.dataset.filename;
                     const btn = imageItem.querySelector('.btn-save');
-
                     await this.saveImageName(filename, input.value.trim(), btn);
                 }
             });
@@ -232,19 +243,14 @@ const Admin = {
         btn.textContent = '...';
 
         try {
-            // Update local metadata
             if (displayName) {
                 this.metadata[filename] = displayName;
             } else {
                 delete this.metadata[filename];
             }
 
-            // Save to GitHub
             await GitHubAPI.saveMetadata(this.metadata);
-
             App.showToast('Name saved!', 'success');
-
-            // Also update main app metadata
             App.metadata = { ...this.metadata };
 
         } catch (error) {
@@ -267,18 +273,15 @@ const Admin = {
         try {
             await GitHubAPI.deleteImage(filename, sha);
 
-            // Remove from local data
             this.products = this.products.filter(p => p.name !== filename);
             delete this.metadata[filename];
 
-            // Animate removal
             imageItem.style.opacity = '0';
             imageItem.style.transform = 'scale(0.8)';
+            imageItem.style.transition = 'all 0.3s ease';
             setTimeout(() => imageItem.remove(), 300);
 
             App.showToast('Image deleted', 'success');
-
-            // Refresh main app
             App.loadProducts();
 
         } catch (error) {
@@ -303,71 +306,38 @@ const Admin = {
 
         const totalFiles = files.length;
         let completed = 0;
-        let failed = 0;
 
         for (const file of files) {
             try {
                 progressText.textContent = `Uploading ${file.name}...`;
-
                 await GitHubAPI.uploadImage(file);
                 completed++;
-
-                const percent = Math.round((completed / totalFiles) * 100);
-                progressFill.style.width = `${percent}%`;
-
+                progressFill.style.width = `${Math.round((completed / totalFiles) * 100)}%`;
             } catch (error) {
                 console.error(`Failed to upload ${file.name}:`, error);
-                failed++;
-                App.showToast(`Failed to upload ${file.name}`, 'error');
+                App.showToast(`Failed: ${file.name}`, 'error');
             }
         }
 
-        // Reset progress
         setTimeout(() => {
             uploadProgress.classList.add('hidden');
             progressFill.style.width = '0%';
         }, 1000);
 
-        // Show result
         if (completed > 0) {
-            App.showToast(`Uploaded ${completed} image${completed > 1 ? 's' : ''}!`, 'success');
-
-            // Refresh both admin and main app
+            App.showToast(`Uploaded ${completed} file${completed > 1 ? 's' : ''}!`, 'success');
             await this.loadProducts();
             App.loadProducts();
         }
     },
 
     /**
-     * Logout
+     * Logout - clears session
      */
     logout() {
         GitHubAPI.clearToken();
         this.showLogin();
-
-        // Close admin panel
-        const adminPanel = document.getElementById('adminPanel');
-        adminPanel.classList.add('hidden');
-        document.body.style.overflow = '';
-
+        App.closeAdminPanel();
         App.showToast('Logged out', 'success');
     },
 };
-
-// Close admin panel when clicking close area
-document.addEventListener('DOMContentLoaded', () => {
-    // Add close button to admin header
-    const adminHeader = document.querySelector('.admin-header');
-    if (adminHeader) {
-        const closeBtn = document.createElement('button');
-        closeBtn.className = 'btn btn-ghost';
-        closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M18 6 6 18M6 6l12 12"/></svg>';
-        closeBtn.style.marginRight = 'auto';
-        closeBtn.style.marginLeft = '0';
-        closeBtn.addEventListener('click', () => {
-            document.getElementById('adminPanel').classList.add('hidden');
-            document.body.style.overflow = '';
-        });
-        adminHeader.insertBefore(closeBtn, adminHeader.firstChild);
-    }
-});

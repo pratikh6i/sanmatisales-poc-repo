@@ -1,10 +1,11 @@
 /**
  * Main Application Logic
- * Handles public website functionality
+ * Handles public website functionality with progressive loading
  */
 const App = {
     products: [],
     metadata: {},
+    currentProduct: null,
 
     /**
      * Initialize the application
@@ -12,7 +13,9 @@ const App = {
     async init() {
         this.setupEventListeners();
         this.setupScrollEffects();
+        this.loadCustomerLogo();
         await this.loadProducts();
+        this.initializeMap();
     },
 
     /**
@@ -23,12 +26,6 @@ const App = {
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', (e) => {
                 const targetId = anchor.getAttribute('href');
-                if (targetId === '#admin') {
-                    e.preventDefault();
-                    this.openAdminPanel();
-                    return;
-                }
-
                 const target = document.querySelector(targetId);
                 if (target) {
                     e.preventDefault();
@@ -37,14 +34,45 @@ const App = {
             });
         });
 
+        // Admin dropdown toggle
+        const adminDropdown = document.getElementById('adminDropdown');
+        const adminTrigger = document.getElementById('adminTrigger');
+        const openAdminBtn = document.getElementById('openAdminBtn');
+
+        if (adminTrigger) {
+            adminTrigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                adminDropdown.classList.toggle('open');
+            });
+
+            // Close on outside click
+            document.addEventListener('click', () => {
+                adminDropdown.classList.remove('open');
+            });
+        }
+
+        if (openAdminBtn) {
+            openAdminBtn.addEventListener('click', () => {
+                this.openAdminPanel();
+                adminDropdown.classList.remove('open');
+            });
+        }
+
+        // Admin panel close
+        const adminClose = document.getElementById('adminClose');
+        if (adminClose) {
+            adminClose.addEventListener('click', () => this.closeAdminPanel());
+        }
+
         // Modal close
         document.getElementById('modalClose').addEventListener('click', () => this.closeModal());
         document.querySelector('.modal-backdrop').addEventListener('click', () => this.closeModal());
 
-        // Escape key to close modal
+        // Escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeModal();
+                this.closeAdminPanel();
             }
         });
 
@@ -72,6 +100,30 @@ const App = {
     },
 
     /**
+     * Load customer logo if available
+     */
+    loadCustomerLogo() {
+        const logoIcon = document.getElementById('logoIcon');
+        const footerLogo = document.getElementById('footerLogo');
+
+        const img = new Image();
+        img.onload = () => {
+            // Logo exists, replace SVG with image
+            if (logoIcon) {
+                logoIcon.innerHTML = `<img src="${CONFIG.LOGO_URL}" alt="Sanmati Sales Logo">`;
+            }
+            if (footerLogo) {
+                footerLogo.innerHTML = `<img src="${CONFIG.LOGO_URL}" alt="Sanmati Sales Logo">`;
+            }
+        };
+        img.onerror = () => {
+            // Logo doesn't exist, keep default SVG
+            console.log('Customer logo not found, using default');
+        };
+        img.src = CONFIG.LOGO_URL;
+    },
+
+    /**
      * Load products from GitHub
      */
     async loadProducts() {
@@ -80,7 +132,6 @@ const App = {
         const productsGrid = document.getElementById('productsGrid');
 
         try {
-            // Fetch products and metadata in parallel
             const [products, metadata] = await Promise.all([
                 GitHubAPI.fetchProducts(),
                 GitHubAPI.fetchMetadata(),
@@ -89,7 +140,6 @@ const App = {
             this.products = products;
             this.metadata = metadata;
 
-            // Hide loading
             loadingState.classList.add('hidden');
 
             if (products.length === 0) {
@@ -97,18 +147,22 @@ const App = {
                 return;
             }
 
-            // Render products
+            // Render products with progressive loading
             productsGrid.innerHTML = products.map(product =>
                 this.renderProductCard(product)
             ).join('');
 
-            // Attach event listeners to cards
+            // Setup progressive image loading
+            this.setupProgressiveLoading();
+
+            // Attach event listeners
             productsGrid.querySelectorAll('.product-card').forEach((card, index) => {
-                card.addEventListener('click', () => {
-                    this.openProductModal(this.products[index]);
+                card.addEventListener('click', (e) => {
+                    if (!e.target.closest('.action-btn')) {
+                        this.openProductModal(this.products[index]);
+                    }
                 });
 
-                // WhatsApp button
                 const whatsappBtn = card.querySelector('.action-btn');
                 if (whatsappBtn) {
                     whatsappBtn.addEventListener('click', (e) => {
@@ -129,18 +183,33 @@ const App = {
     },
 
     /**
+     * Setup progressive image loading
+     */
+    setupProgressiveLoading() {
+        const images = document.querySelectorAll('.product-card-image');
+
+        images.forEach(img => {
+            // Check if already loaded (cached)
+            if (img.complete) {
+                img.classList.add('loaded');
+            } else {
+                img.addEventListener('load', () => {
+                    img.classList.add('loaded');
+                });
+            }
+        });
+    },
+
+    /**
      * Get display name for a product
      */
     getDisplayName(filename) {
-        // Check metadata first
         if (this.metadata[filename]) {
             return this.metadata[filename];
         }
 
-        // Parse filename
-        let name = filename.replace(/\.[^/.]+$/, ''); // Remove extension
+        let name = filename.replace(/\.[^/.]+$/, '');
 
-        // Remove common prefixes
         const prefixes = [
             /^Gemini_Generated_Image_/i,
             /^unnamed\s*\(?[\d]*\)?/i,
@@ -155,13 +224,9 @@ const App = {
             name = name.replace(prefix, '');
         });
 
-        // Clean up
         name = name.replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
-
-        // Title case
         name = name.replace(/\b\w/g, l => l.toUpperCase());
 
-        // Default if too short
         if (name.length < 3) {
             name = 'Premium Tool';
         }
@@ -170,24 +235,34 @@ const App = {
     },
 
     /**
-     * Render a product card
+     * Render a product card with progressive loading
      */
     renderProductCard(product) {
         const displayName = this.getDisplayName(product.name);
+        const isVideo = CONFIG.VIDEO_EXTENSIONS.some(ext =>
+            product.name.toLowerCase().endsWith(`.${ext}`)
+        );
 
         return `
             <article class="product-card" data-filename="${product.name}">
-                <img 
-                    class="product-card-image" 
-                    src="${product.rawUrl}" 
-                    alt="${displayName}"
-                    loading="lazy"
-                >
+                <div class="product-card-image-wrapper">
+                    ${isVideo ? `
+                        <video class="product-card-image loaded" src="${product.rawUrl}" muted loop></video>
+                    ` : `
+                        <img 
+                            class="product-card-image" 
+                            src="${product.rawUrl}" 
+                            alt="${displayName}"
+                            loading="lazy"
+                        >
+                        <div class="product-card-placeholder"></div>
+                    `}
+                </div>
                 <div class="product-card-overlay">
                     <h3 class="product-card-name">${displayName}</h3>
                     <div class="product-card-delivery">
                         <span>🚚</span>
-                        <span>Home Delivery</span>
+                        <span>FREE Delivery</span>
                     </div>
                 </div>
                 <div class="product-card-actions">
@@ -202,6 +277,58 @@ const App = {
     },
 
     /**
+     * Initialize the coverage map
+     */
+    initializeMap() {
+        const mapContainer = document.getElementById('coverage-map');
+        if (!mapContainer || typeof L === 'undefined') return;
+
+        // Center on Kumbhoj
+        const map = L.map('coverage-map', {
+            center: [16.7361, 74.3708],
+            zoom: 10,
+            scrollWheelZoom: false,
+        });
+
+        // Use OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap',
+            maxZoom: 18,
+        }).addTo(map);
+
+        // Custom marker icon
+        const markerIcon = L.divIcon({
+            className: 'custom-marker',
+            html: `<div style="
+                width: 24px;
+                height: 24px;
+                background: linear-gradient(135deg, #00b4d8, #0077b6);
+                border: 3px solid white;
+                border-radius: 50%;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            "></div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+        });
+
+        // Add markers for all locations
+        CONFIG.MAP_LOCATIONS.forEach(location => {
+            L.marker([location.lat, location.lng], { icon: markerIcon })
+                .addTo(map)
+                .bindPopup(`<strong>${location.name}</strong><br>Delivery Available`);
+        });
+
+        // Enable scroll zoom on focus
+        map.on('click', () => {
+            map.scrollWheelZoom.enable();
+        });
+
+        map.on('mouseout', () => {
+            map.scrollWheelZoom.disable();
+        });
+    },
+
+    /**
      * Open product modal
      */
     openProductModal(product) {
@@ -212,7 +339,16 @@ const App = {
         const modalMedia = document.getElementById('modalMedia');
         const modalTitle = document.getElementById('modalTitle');
 
-        modalMedia.innerHTML = `<img src="${product.rawUrl}" alt="${displayName}">`;
+        const isVideo = CONFIG.VIDEO_EXTENSIONS.some(ext =>
+            product.name.toLowerCase().endsWith(`.${ext}`)
+        );
+
+        if (isVideo) {
+            modalMedia.innerHTML = `<video src="${product.rawUrl}" controls autoplay muted></video>`;
+        } else {
+            modalMedia.innerHTML = `<img src="${product.rawUrl}" alt="${displayName}">`;
+        }
+
         modalTitle.textContent = displayName;
 
         modal.classList.add('active');
@@ -237,9 +373,9 @@ const App = {
 
 *${productName}*
 
-📷 View Product: ${imageUrl}
+📷 View: ${imageUrl}
 
-🚚 Is home delivery available to my location?`;
+🚚 Is home delivery available?`;
 
         const url = `https://wa.me/${CONFIG.WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
         window.open(url, '_blank');
@@ -253,10 +389,18 @@ const App = {
         adminPanel.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
 
-        // Initialize admin if needed
         if (typeof Admin !== 'undefined') {
             Admin.init();
         }
+    },
+
+    /**
+     * Close admin panel
+     */
+    closeAdminPanel() {
+        const adminPanel = document.getElementById('adminPanel');
+        adminPanel.classList.add('hidden');
+        document.body.style.overflow = '';
     },
 
     /**
@@ -272,13 +416,12 @@ const App = {
 
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
-        toast.innerHTML = `${icons[type]}<span>${message}</span>`;
+        toast.innerHTML = `${icons[type] || ''}<span>${message}</span>`;
 
         container.appendChild(toast);
 
-        // Auto remove after 4 seconds
         setTimeout(() => {
-            toast.style.animation = 'fadeIn 0.3s ease-out reverse';
+            toast.style.animation = 'toastSlideIn 0.3s ease-out reverse';
             setTimeout(() => toast.remove(), 300);
         }, 4000);
     },

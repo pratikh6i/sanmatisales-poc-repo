@@ -10,17 +10,20 @@ const GitHubAPI = {
      */
     init() {
         const storedToken = localStorage.getItem(CONFIG.STORAGE_KEYS.GITHUB_TOKEN);
-        if (storedToken) {
+        const sessionValid = localStorage.getItem(CONFIG.STORAGE_KEYS.SESSION_VALID);
+
+        if (storedToken && sessionValid) {
             this.token = storedToken;
         }
     },
 
     /**
-     * Set and store the GitHub token
+     * Set and store the GitHub token with session
      */
     setToken(token) {
         this.token = token;
         localStorage.setItem(CONFIG.STORAGE_KEYS.GITHUB_TOKEN, token);
+        localStorage.setItem(CONFIG.STORAGE_KEYS.SESSION_VALID, 'true');
     },
 
     /**
@@ -29,6 +32,7 @@ const GitHubAPI = {
     clearToken() {
         this.token = null;
         localStorage.removeItem(CONFIG.STORAGE_KEYS.GITHUB_TOKEN);
+        localStorage.removeItem(CONFIG.STORAGE_KEYS.SESSION_VALID);
     },
 
     /**
@@ -62,21 +66,21 @@ const GitHubAPI = {
     },
 
     /**
-     * Fetch all products (images) from the repository
+     * Fetch all products (images/videos) from the repository
      */
     async fetchProducts() {
         try {
             const files = await this.request(CONFIG.GITHUB_API_URL);
 
-            // Filter for image files only
-            const imageFiles = files.filter(file => {
+            // Filter for media files only
+            const allExtensions = [...CONFIG.ALLOWED_EXTENSIONS, ...CONFIG.VIDEO_EXTENSIONS];
+            const mediaFiles = files.filter(file => {
                 if (file.type !== 'file') return false;
                 const ext = file.name.split('.').pop().toLowerCase();
-                return CONFIG.ALLOWED_EXTENSIONS.includes(ext);
+                return allExtensions.includes(ext);
             });
 
-            // Add raw URL to each file
-            return imageFiles.map(file => ({
+            return mediaFiles.map(file => ({
                 name: file.name,
                 path: file.path,
                 sha: file.sha,
@@ -85,6 +89,11 @@ const GitHubAPI = {
                 rawUrl: `${CONFIG.GITHUB_RAW_URL}/${file.name}`,
             }));
         } catch (error) {
+            // If media folder doesn't exist yet, return empty array
+            if (error.message.includes('404') || error.message.includes('Not Found')) {
+                console.warn('Media folder not found, returning empty products list');
+                return [];
+            }
             console.error('Failed to fetch products:', error);
             throw error;
         }
@@ -100,7 +109,6 @@ const GitHubAPI = {
             const content = atob(file.content);
             return JSON.parse(content);
         } catch (error) {
-            // Return empty metadata if file doesn't exist
             console.warn('Products metadata not found, using defaults');
             return {};
         }
@@ -114,16 +122,15 @@ const GitHubAPI = {
             throw new Error('Not authenticated');
         }
 
-        const content = btoa(JSON.stringify(metadata, null, 2));
+        const content = btoa(unescape(encodeURIComponent(JSON.stringify(metadata, null, 2))));
         const url = `${CONFIG.GITHUB_API_URL}/${CONFIG.PRODUCTS_JSON}`;
 
-        // Get existing file SHA if it exists
         let sha = null;
         try {
             const existing = await this.request(url);
             sha = existing.sha;
         } catch (e) {
-            // File doesn't exist yet, that's fine
+            // File doesn't exist yet
         }
 
         const body = {
@@ -142,6 +149,27 @@ const GitHubAPI = {
     },
 
     /**
+     * Create media folder if it doesn't exist
+     */
+    async ensureMediaFolder() {
+        try {
+            await this.request(CONFIG.GITHUB_API_URL);
+        } catch (error) {
+            if (error.message.includes('404') || error.message.includes('Not Found')) {
+                // Create a placeholder file to create the folder
+                const url = `${CONFIG.GITHUB_API_URL}/.gitkeep`;
+                await this.request(url, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        message: 'Create media folder',
+                        content: btoa('# Media folder for product images'),
+                    }),
+                });
+            }
+        }
+    },
+
+    /**
      * Upload a new image
      */
     async uploadImage(file, customName = null) {
@@ -149,25 +177,25 @@ const GitHubAPI = {
             throw new Error('Not authenticated');
         }
 
-        // Validate file
         if (file.size > CONFIG.MAX_FILE_SIZE) {
-            throw new Error('File too large. Maximum size is 5MB.');
+            throw new Error('File too large. Maximum size is 10MB.');
         }
 
         const ext = file.name.split('.').pop().toLowerCase();
-        if (!CONFIG.ALLOWED_EXTENSIONS.includes(ext)) {
-            throw new Error('Invalid file type. Allowed: ' + CONFIG.ALLOWED_EXTENSIONS.join(', '));
+        const allExtensions = [...CONFIG.ALLOWED_EXTENSIONS, ...CONFIG.VIDEO_EXTENSIONS];
+        if (!allExtensions.includes(ext)) {
+            throw new Error('Invalid file type.');
         }
 
-        // Generate unique filename
+        // Ensure media folder exists
+        await this.ensureMediaFolder();
+
         const timestamp = Date.now();
         const filename = customName
             ? `${customName.replace(/[^a-z0-9]/gi, '_')}_${timestamp}.${ext}`
             : `product_${timestamp}.${ext}`;
 
-        // Convert to base64
         const base64 = await this.fileToBase64(file);
-
         const url = `${CONFIG.GITHUB_API_URL}/${filename}`;
 
         return this.request(url, {
@@ -210,11 +238,9 @@ const GitHubAPI = {
                 },
             });
 
-            if (!response.ok) {
-                return false;
-            }
+            if (!response.ok) return false;
 
-            // Also check repo access
+            // Check repo access
             const repoResponse = await fetch(
                 `https://api.github.com/repos/${CONFIG.GITHUB_USERNAME}/${CONFIG.GITHUB_REPO}`,
                 {
@@ -238,7 +264,6 @@ const GitHubAPI = {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => {
-                // Remove data URL prefix
                 const base64 = reader.result.split(',')[1];
                 resolve(base64);
             };
