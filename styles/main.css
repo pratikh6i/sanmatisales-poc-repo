@@ -408,6 +408,14 @@ textarea {
     gap: var(--space-4);
 }
 
+/* Phone Number */
+.hero-phone {
+    margin-top: var(--space-4);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--gray-600);
+}
+
 /* --- Buttons --- */
 .btn {
     display: inline-flex;
@@ -884,32 +892,56 @@ textarea {
     color: var(--primary-700);
 }
 
-/* Trusted By */
+/* Trusted By - Enhanced */
 .trusted-by {
-    margin-top: var(--space-12);
+    margin-top: var(--space-16);
     text-align: center;
+    padding: var(--space-8);
+    background: var(--white);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-lg);
 }
 
 .trusted-title {
-    font-size: var(--font-size-sm);
-    color: var(--gray-500);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: var(--space-6);
-}
-
-.trusted-logos {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-6);
-    opacity: 0.6;
-}
-
-.trusted-logos span {
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-xl);
     font-weight: 700;
-    color: var(--gray-500);
+    color: var(--gray-800);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-8);
+}
+
+.trusted-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--space-4);
+}
+
+.trusted-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-5);
+    background: var(--gray-50);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-base);
+}
+
+.trusted-card:hover {
+    background: var(--primary-50);
+    transform: translateY(-4px);
+}
+
+.trusted-emoji {
+    font-size: 2.5rem;
+}
+
+.trusted-name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--gray-700);
+    text-align: center;
 }
 
 /* --- Footer --- */

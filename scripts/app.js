@@ -296,19 +296,21 @@ const App = {
             maxZoom: 18,
         }).addTo(map);
 
-        // Custom marker icon
+        // Red location marker icon
         const markerIcon = L.divIcon({
             className: 'custom-marker',
             html: `<div style="
-                width: 24px;
-                height: 24px;
-                background: linear-gradient(135deg, #00b4d8, #0077b6);
-                border: 3px solid white;
-                border-radius: 50%;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            "></div>`,
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
+                width: 28px;
+                height: 36px;
+                position: relative;
+            ">
+                <svg viewBox="0 0 24 36" fill="#e53935" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: 100%; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));">
+                    <path d="M12 0C5.37 0 0 5.37 0 12c0 9 12 24 12 24s12-15 12-24c0-6.63-5.37-12-12-12zm0 16.5c-2.49 0-4.5-2.01-4.5-4.5s2.01-4.5 4.5-4.5 4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5z"/>
+                </svg>
+            </div>`,
+            iconSize: [28, 36],
+            iconAnchor: [14, 36],
+            popupAnchor: [0, -36],
         });
 
         // Add markers for all locations
