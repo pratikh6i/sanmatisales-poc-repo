@@ -147,8 +147,22 @@ const App = {
                 return;
             }
 
+            // Sort by saved order if available
+            let sortedProducts = products;
+            if (metadata._order && Array.isArray(metadata._order)) {
+                sortedProducts = [...products].sort((a, b) => {
+                    const indexA = metadata._order.indexOf(a.name);
+                    const indexB = metadata._order.indexOf(b.name);
+                    if (indexA === -1) return 1;
+                    if (indexB === -1) return -1;
+                    return indexA - indexB;
+                });
+            }
+
+            this.products = sortedProducts;
+
             // Render products with progressive loading
-            productsGrid.innerHTML = products.map(product =>
+            productsGrid.innerHTML = sortedProducts.map(product =>
                 this.renderProductCard(product)
             ).join('');
 

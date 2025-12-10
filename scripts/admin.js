@@ -1,11 +1,14 @@
 /**
  * Admin Panel Logic
- * Handles image management with session persistence
+ * Handles image management with session persistence and drag-rearrange
  */
 const Admin = {
     isInitialized: false,
     products: [],
     metadata: {},
+    productOrder: [],
+    isReorderMode: false,
+    draggedItem: null,
 
     /**
      * Initialize admin panel
@@ -56,17 +59,200 @@ const Admin = {
             this.handleFiles(e.target.files);
             fileInput.value = '';
         });
+
+        // Reorder toggle button
+        const reorderToggle = document.getElementById('reorderToggle');
+        if (reorderToggle) {
+            reorderToggle.addEventListener('click', () => this.toggleReorderMode());
+        }
+    },
+
+    /**
+     * Toggle reorder mode
+     */
+    toggleReorderMode() {
+        this.isReorderMode = !this.isReorderMode;
+        const toggle = document.getElementById('reorderToggle');
+        const imagesGrid = document.getElementById('imagesGrid');
+
+        if (this.isReorderMode) {
+            toggle.classList.add('active');
+            toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>Done Reordering</span>`;
+            imagesGrid.classList.add('reorder-mode');
+            this.enableDragAndDrop();
+            App.showToast('Drag images to reorder. Tap "Done" when finished.', 'success');
+        } else {
+            toggle.classList.remove('active');
+            toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span>Reorder Images</span>`;
+            imagesGrid.classList.remove('reorder-mode');
+            this.disableDragAndDrop();
+            this.saveProductOrder();
+        }
+    },
+
+    /**
+     * Enable drag and drop
+     */
+    enableDragAndDrop() {
+        const items = document.querySelectorAll('.image-item');
+        items.forEach(item => {
+            item.setAttribute('draggable', 'true');
+            item.classList.add('draggable');
+
+            // Mouse events
+            item.addEventListener('dragstart', this.handleDragStart.bind(this));
+            item.addEventListener('dragend', this.handleDragEnd.bind(this));
+            item.addEventListener('dragover', this.handleDragOver.bind(this));
+            item.addEventListener('drop', this.handleDrop.bind(this));
+
+            // Touch events for mobile
+            item.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false });
+            item.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
+            item.addEventListener('touchend', this.handleTouchEnd.bind(this));
+        });
+    },
+
+    /**
+     * Disable drag and drop
+     */
+    disableDragAndDrop() {
+        const items = document.querySelectorAll('.image-item');
+        items.forEach(item => {
+            item.setAttribute('draggable', 'false');
+            item.classList.remove('draggable', 'dragging');
+        });
+    },
+
+    /**
+     * Handle drag start
+     */
+    handleDragStart(e) {
+        if (!this.isReorderMode) return;
+        this.draggedItem = e.currentTarget;
+        e.currentTarget.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    },
+
+    /**
+     * Handle drag end
+     */
+    handleDragEnd(e) {
+        e.currentTarget.classList.remove('dragging');
+        this.draggedItem = null;
+    },
+
+    /**
+     * Handle drag over
+     */
+    handleDragOver(e) {
+        if (!this.isReorderMode || !this.draggedItem) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        const target = e.currentTarget;
+        if (target !== this.draggedItem) {
+            const grid = document.getElementById('imagesGrid');
+            const items = [...grid.querySelectorAll('.image-item:not(.dragging)')];
+            const targetIndex = items.indexOf(target);
+            const draggedIndex = [...grid.querySelectorAll('.image-item')].indexOf(this.draggedItem);
+
+            if (targetIndex > draggedIndex) {
+                target.after(this.draggedItem);
+            } else {
+                target.before(this.draggedItem);
+            }
+        }
+    },
+
+    /**
+     * Handle drop
+     */
+    handleDrop(e) {
+        e.preventDefault();
+    },
+
+    // Touch event handlers for mobile
+    touchStartY: 0,
+    touchStartX: 0,
+    touchItem: null,
+    touchClone: null,
+
+    handleTouchStart(e) {
+        if (!this.isReorderMode) return;
+
+        const touch = e.touches[0];
+        this.touchStartX = touch.clientX;
+        this.touchStartY = touch.clientY;
+        this.touchItem = e.currentTarget;
+
+        // Create visual clone for dragging
+        setTimeout(() => {
+            if (this.touchItem) {
+                this.touchItem.classList.add('dragging');
+            }
+        }, 100);
+    },
+
+    handleTouchMove(e) {
+        if (!this.isReorderMode || !this.touchItem) return;
+        e.preventDefault();
+
+        const touch = e.touches[0];
+        const grid = document.getElementById('imagesGrid');
+        const items = [...grid.querySelectorAll('.image-item:not(.dragging)')];
+
+        // Find element under touch point
+        const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+        const targetItem = elemBelow?.closest('.image-item');
+
+        if (targetItem && targetItem !== this.touchItem) {
+            const targetRect = targetItem.getBoundingClientRect();
+            const targetCenter = targetRect.top + targetRect.height / 2;
+
+            if (touch.clientY < targetCenter) {
+                targetItem.before(this.touchItem);
+            } else {
+                targetItem.after(this.touchItem);
+            }
+        }
+    },
+
+    handleTouchEnd(e) {
+        if (this.touchItem) {
+            this.touchItem.classList.remove('dragging');
+            this.touchItem = null;
+        }
+    },
+
+    /**
+     * Save product order to metadata
+     */
+    async saveProductOrder() {
+        const grid = document.getElementById('imagesGrid');
+        const items = grid.querySelectorAll('.image-item');
+        const order = [...items].map(item => item.dataset.filename);
+
+        try {
+            // Store order in metadata
+            this.metadata._order = order;
+            await GitHubAPI.saveMetadata(this.metadata);
+            App.showToast('Order saved!', 'success');
+
+            // Reload public view with new order
+            App.loadProducts();
+        } catch (error) {
+            console.error('Failed to save order:', error);
+            App.showToast('Failed to save order', 'error');
+        }
     },
 
     /**
      * Check authentication status - with session persistence
      */
     checkAuth() {
-        // Re-initialize GitHubAPI to check stored token
         GitHubAPI.init();
 
         if (GitHubAPI.isAuthenticated()) {
-            // Already authenticated from previous session
             this.showManager();
             this.loadProducts();
         } else {
@@ -150,7 +336,19 @@ const Admin = {
                 return;
             }
 
-            imagesGrid.innerHTML = products.map(product => this.renderImageItem(product)).join('');
+            // Sort by saved order if available
+            let sortedProducts = products;
+            if (metadata._order && Array.isArray(metadata._order)) {
+                sortedProducts = [...products].sort((a, b) => {
+                    const indexA = metadata._order.indexOf(a.name);
+                    const indexB = metadata._order.indexOf(b.name);
+                    if (indexA === -1) return 1;
+                    if (indexB === -1) return -1;
+                    return indexA - indexB;
+                });
+            }
+
+            imagesGrid.innerHTML = sortedProducts.map(product => this.renderImageItem(product)).join('');
             this.attachImageEventListeners();
 
         } catch (error) {
@@ -170,6 +368,13 @@ const Admin = {
 
         return `
             <div class="image-item" data-filename="${product.name}" data-sha="${product.sha}">
+                <div class="drag-handle">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/>
+                        <circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/>
+                        <circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/>
+                    </svg>
+                </div>
                 <div class="image-preview">
                     ${isVideo
                 ? `<video src="${product.rawUrl}" muted loop></video>`
@@ -275,6 +480,11 @@ const Admin = {
 
             this.products = this.products.filter(p => p.name !== filename);
             delete this.metadata[filename];
+
+            // Remove from order
+            if (this.metadata._order) {
+                this.metadata._order = this.metadata._order.filter(n => n !== filename);
+            }
 
             imageItem.style.opacity = '0';
             imageItem.style.transform = 'scale(0.8)';

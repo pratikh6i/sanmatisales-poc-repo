@@ -25,10 +25,10 @@
     --accent-200: #ffcc80;
     --accent-100: #ffe0b2;
 
-    /* Delivery Badge - Vibrant Green */
-    --delivery-600: #00a651;
-    --delivery-500: #00c853;
-    --delivery-400: #69f0ae;
+    /* Delivery Badge - Dark Blue (as per user preference) */
+    --delivery-600: #0d1b3e;
+    --delivery-500: #132850;
+    --delivery-400: #1a3666;
 
     /* Neutrals */
     --white: #ffffff;
@@ -355,7 +355,7 @@ textarea {
     font-size: var(--font-size-sm);
     font-weight: 700;
     margin-bottom: var(--space-8);
-    box-shadow: 0 4px 20px rgba(0, 200, 83, 0.4);
+    box-shadow: 0 4px 20px rgba(13, 27, 62, 0.4);
     animation: pulse-badge 2s ease-in-out infinite;
 }
 
@@ -661,7 +661,7 @@ textarea {
     font-size: var(--font-size-xs);
     font-weight: 700;
     width: fit-content;
-    box-shadow: 0 2px 8px rgba(0, 200, 83, 0.3);
+    box-shadow: 0 2px 8px rgba(13, 27, 62, 0.3);
 }
 
 .product-card-actions {
@@ -1067,7 +1067,7 @@ textarea {
     border-radius: var(--radius-full);
     font-weight: 700;
     margin-bottom: var(--space-10);
-    box-shadow: 0 4px 20px rgba(0, 200, 83, 0.3);
+    box-shadow: 0 4px 20px rgba(13, 27, 62, 0.3);
 }
 
 .footer-delivery span:first-child {
@@ -1449,6 +1449,100 @@ textarea {
 .btn-delete:hover {
     background: var(--error);
     color: var(--white);
+}
+
+/* Admin Toolbar */
+.admin-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--space-4);
+}
+
+.btn-reorder {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--gray-100);
+    border: 2px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--gray-700);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-reorder svg {
+    width: 18px;
+    height: 18px;
+}
+
+.btn-reorder:hover {
+    background: var(--primary-50);
+    border-color: var(--primary-300);
+    color: var(--primary-700);
+}
+
+.btn-reorder.active {
+    background: var(--primary-600);
+    border-color: var(--primary-600);
+    color: var(--white);
+}
+
+/* Drag Handle */
+.drag-handle {
+    display: none;
+    position: absolute;
+    top: var(--space-2);
+    left: var(--space-2);
+    width: 32px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: var(--radius-md);
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    box-shadow: var(--shadow-md);
+    z-index: 10;
+}
+
+.drag-handle svg {
+    width: 16px;
+    height: 16px;
+    color: var(--gray-500);
+}
+
+/* Reorder Mode */
+.images-grid.reorder-mode .image-item {
+    position: relative;
+    cursor: grab;
+    user-select: none;
+}
+
+.images-grid.reorder-mode .drag-handle {
+    display: flex;
+}
+
+.images-grid.reorder-mode .image-item:active {
+    cursor: grabbing;
+}
+
+.images-grid.reorder-mode .image-controls {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* Dragging State */
+.image-item.dragging {
+    opacity: 0.5;
+    transform: scale(1.05);
+    box-shadow: var(--shadow-2xl);
+    z-index: 100;
+}
+
+.image-item.draggable {
+    transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
 /* --- Toast --- */
