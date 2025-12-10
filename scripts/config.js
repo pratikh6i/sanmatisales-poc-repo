@@ -24,6 +24,11 @@ const CONFIG = {
         return `https://raw.githubusercontent.com/${this.GITHUB_USERNAME}/${this.GITHUB_REPO}/main/assets/logo.png`;
     },
 
+    // WhatsApp logo location - upload your custom WhatsApp logo here
+    get WHATSAPP_LOGO_URL() {
+        return `https://raw.githubusercontent.com/${this.GITHUB_USERNAME}/${this.GITHUB_REPO}/main/assets/whatsapp.png`;
+    },
+
     // Products metadata file
     PRODUCTS_JSON: 'products.json',
 

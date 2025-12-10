@@ -704,6 +704,13 @@ textarea {
     height: 24px;
 }
 
+.whatsapp-logo {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    border-radius: 6px;
+}
+
 /* --- Loading & Empty States --- */
 .loading-state,
 .empty-state {
@@ -1101,14 +1108,16 @@ textarea {
 
 .modal-container {
     position: relative;
-    max-width: 900px;
+    max-width: min(90vw, 600px);
     width: 100%;
-    max-height: 90vh;
+    max-height: 85vh;
     background: var(--white);
     border-radius: var(--radius-2xl);
     overflow: hidden;
     box-shadow: var(--shadow-2xl);
     animation: modalSlideUp 0.3s ease-out;
+    display: flex;
+    flex-direction: column;
 }
 
 @keyframes modalSlideUp {
@@ -1153,19 +1162,25 @@ textarea {
 .modal-content {
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .modal-media {
     width: 100%;
-    aspect-ratio: 16/10;
+    max-height: 50vh;
     background: var(--gray-100);
     overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .modal-media img,
 .modal-media video {
-    width: 100%;
-    height: 100%;
+    max-width: 100%;
+    max-height: 50vh;
+    width: auto;
+    height: auto;
     object-fit: contain;
 }
 
