@@ -1490,59 +1490,80 @@ textarea {
     color: var(--white);
 }
 
-/* Drag Handle */
-.drag-handle {
+/* Reorder Arrows - Mobile Friendly */
+.reorder-arrows {
     display: none;
     position: absolute;
     top: var(--space-2);
-    left: var(--space-2);
-    width: 32px;
-    height: 32px;
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: var(--radius-md);
-    align-items: center;
-    justify-content: center;
-    cursor: grab;
-    box-shadow: var(--shadow-md);
+    right: var(--space-2);
+    flex-direction: column;
+    gap: var(--space-1);
     z-index: 10;
 }
 
-.drag-handle svg {
-    width: 16px;
-    height: 16px;
-    color: var(--gray-500);
+.images-grid.reorder-mode .reorder-arrows {
+    display: flex;
+}
+
+.move-up-btn,
+.move-down-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--primary-600);
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    box-shadow: var(--shadow-md);
+}
+
+.move-up-btn:hover,
+.move-down-btn:hover {
+    background: var(--primary-700);
+    transform: scale(1.1);
+}
+
+.move-up-btn.disabled,
+.move-down-btn.disabled {
+    background: var(--gray-300);
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.move-up-btn svg,
+.move-down-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.position-badge {
+    background: var(--white);
+    color: var(--primary-600);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: var(--space-1) auto;
+    box-shadow: var(--shadow-sm);
 }
 
 /* Reorder Mode */
 .images-grid.reorder-mode .image-item {
     position: relative;
-    cursor: grab;
-    user-select: none;
-}
-
-.images-grid.reorder-mode .drag-handle {
-    display: flex;
-}
-
-.images-grid.reorder-mode .image-item:active {
-    cursor: grabbing;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .images-grid.reorder-mode .image-controls {
     pointer-events: none;
     opacity: 0.5;
-}
-
-/* Dragging State */
-.image-item.dragging {
-    opacity: 0.5;
-    transform: scale(1.05);
-    box-shadow: var(--shadow-2xl);
-    z-index: 100;
-}
-
-.image-item.draggable {
-    transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
 /* --- Toast --- */

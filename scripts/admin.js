@@ -1,6 +1,6 @@
 /**
  * Admin Panel Logic
- * Handles image management with session persistence and drag-rearrange
+ * Handles image management with session persistence and easy reordering
  */
 const Admin = {
     isInitialized: false,
@@ -8,7 +8,6 @@ const Admin = {
     metadata: {},
     productOrder: [],
     isReorderMode: false,
-    draggedItem: null,
 
     /**
      * Initialize admin panel
@@ -77,151 +76,61 @@ const Admin = {
 
         if (this.isReorderMode) {
             toggle.classList.add('active');
-            toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>Done Reordering</span>`;
+            toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>Save Order</span>`;
             imagesGrid.classList.add('reorder-mode');
-            this.enableDragAndDrop();
-            App.showToast('Drag images to reorder. Tap "Done" when finished.', 'success');
+            this.attachReorderListeners();
+            App.showToast('Use arrows to reorder. Tap "Save Order" when done.', 'success');
         } else {
             toggle.classList.remove('active');
             toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span>Reorder Images</span>`;
             imagesGrid.classList.remove('reorder-mode');
-            this.disableDragAndDrop();
             this.saveProductOrder();
         }
     },
 
     /**
-     * Enable drag and drop
+     * Attach reorder arrow button listeners
      */
-    enableDragAndDrop() {
-        const items = document.querySelectorAll('.image-item');
-        items.forEach(item => {
-            item.setAttribute('draggable', 'true');
-            item.classList.add('draggable');
-
-            // Mouse events
-            item.addEventListener('dragstart', this.handleDragStart.bind(this));
-            item.addEventListener('dragend', this.handleDragEnd.bind(this));
-            item.addEventListener('dragover', this.handleDragOver.bind(this));
-            item.addEventListener('drop', this.handleDrop.bind(this));
-
-            // Touch events for mobile
-            item.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: false });
-            item.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
-            item.addEventListener('touchend', this.handleTouchEnd.bind(this));
-        });
-    },
-
-    /**
-     * Disable drag and drop
-     */
-    disableDragAndDrop() {
-        const items = document.querySelectorAll('.image-item');
-        items.forEach(item => {
-            item.setAttribute('draggable', 'false');
-            item.classList.remove('draggable', 'dragging');
-        });
-    },
-
-    /**
-     * Handle drag start
-     */
-    handleDragStart(e) {
-        if (!this.isReorderMode) return;
-        this.draggedItem = e.currentTarget;
-        e.currentTarget.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-    },
-
-    /**
-     * Handle drag end
-     */
-    handleDragEnd(e) {
-        e.currentTarget.classList.remove('dragging');
-        this.draggedItem = null;
-    },
-
-    /**
-     * Handle drag over
-     */
-    handleDragOver(e) {
-        if (!this.isReorderMode || !this.draggedItem) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-
-        const target = e.currentTarget;
-        if (target !== this.draggedItem) {
-            const grid = document.getElementById('imagesGrid');
-            const items = [...grid.querySelectorAll('.image-item:not(.dragging)')];
-            const targetIndex = items.indexOf(target);
-            const draggedIndex = [...grid.querySelectorAll('.image-item')].indexOf(this.draggedItem);
-
-            if (targetIndex > draggedIndex) {
-                target.after(this.draggedItem);
-            } else {
-                target.before(this.draggedItem);
-            }
-        }
-    },
-
-    /**
-     * Handle drop
-     */
-    handleDrop(e) {
-        e.preventDefault();
-    },
-
-    // Touch event handlers for mobile
-    touchStartY: 0,
-    touchStartX: 0,
-    touchItem: null,
-    touchClone: null,
-
-    handleTouchStart(e) {
-        if (!this.isReorderMode) return;
-
-        const touch = e.touches[0];
-        this.touchStartX = touch.clientX;
-        this.touchStartY = touch.clientY;
-        this.touchItem = e.currentTarget;
-
-        // Create visual clone for dragging
-        setTimeout(() => {
-            if (this.touchItem) {
-                this.touchItem.classList.add('dragging');
-            }
-        }, 100);
-    },
-
-    handleTouchMove(e) {
-        if (!this.isReorderMode || !this.touchItem) return;
-        e.preventDefault();
-
-        const touch = e.touches[0];
+    attachReorderListeners() {
         const grid = document.getElementById('imagesGrid');
-        const items = [...grid.querySelectorAll('.image-item:not(.dragging)')];
 
-        // Find element under touch point
-        const elemBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-        const targetItem = elemBelow?.closest('.image-item');
+        // Move up buttons
+        grid.querySelectorAll('.move-up-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const item = btn.closest('.image-item');
+                const prev = item.previousElementSibling;
+                if (prev) {
+                    item.parentNode.insertBefore(item, prev);
+                    this.flashItem(item);
+                }
+            };
+        });
 
-        if (targetItem && targetItem !== this.touchItem) {
-            const targetRect = targetItem.getBoundingClientRect();
-            const targetCenter = targetRect.top + targetRect.height / 2;
-
-            if (touch.clientY < targetCenter) {
-                targetItem.before(this.touchItem);
-            } else {
-                targetItem.after(this.touchItem);
-            }
-        }
+        // Move down buttons
+        grid.querySelectorAll('.move-down-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const item = btn.closest('.image-item');
+                const next = item.nextElementSibling;
+                if (next) {
+                    item.parentNode.insertBefore(next, item);
+                    this.flashItem(item);
+                }
+            };
+        });
     },
 
-    handleTouchEnd(e) {
-        if (this.touchItem) {
-            this.touchItem.classList.remove('dragging');
-            this.touchItem = null;
-        }
+    /**
+     * Flash item to show it moved
+     */
+    flashItem(item) {
+        item.style.transform = 'scale(1.02)';
+        item.style.boxShadow = '0 0 20px rgba(0, 180, 216, 0.5)';
+        setTimeout(() => {
+            item.style.transform = '';
+            item.style.boxShadow = '';
+        }, 200);
     },
 
     /**
@@ -233,12 +142,9 @@ const Admin = {
         const order = [...items].map(item => item.dataset.filename);
 
         try {
-            // Store order in metadata
             this.metadata._order = order;
             await GitHubAPI.saveMetadata(this.metadata);
             App.showToast('Order saved!', 'success');
-
-            // Reload public view with new order
             App.loadProducts();
         } catch (error) {
             console.error('Failed to save order:', error);
@@ -247,7 +153,7 @@ const Admin = {
     },
 
     /**
-     * Check authentication status - with session persistence
+     * Check authentication status
      */
     checkAuth() {
         GitHubAPI.init();
@@ -282,7 +188,7 @@ const Admin = {
             GitHubAPI.setToken(token);
             this.showManager();
             await this.loadProducts();
-            App.showToast('Login successful! Session saved.', 'success');
+            App.showToast('Login successful!', 'success');
         } else {
             App.showToast('Invalid token or no repo access', 'error');
         }
@@ -292,17 +198,11 @@ const Admin = {
         tokenInput.value = '';
     },
 
-    /**
-     * Show login form
-     */
     showLogin() {
         document.getElementById('adminLogin').classList.remove('hidden');
         document.getElementById('adminManager').classList.add('hidden');
     },
 
-    /**
-     * Show manager interface
-     */
     showManager() {
         document.getElementById('adminLogin').classList.add('hidden');
         document.getElementById('adminManager').classList.remove('hidden');
@@ -328,15 +228,12 @@ const Admin = {
                 imagesGrid.innerHTML = `
                     <div style="grid-column: 1/-1; text-align: center; padding: var(--space-8); color: var(--gray-500);">
                         <p>No images yet. Upload your first product!</p>
-                        <p style="font-size: var(--font-size-sm); margin-top: var(--space-2);">
-                            Images will be stored in: <code>media/</code> folder
-                        </p>
                     </div>
                 `;
                 return;
             }
 
-            // Sort by saved order if available
+            // Sort by saved order
             let sortedProducts = products;
             if (metadata._order && Array.isArray(metadata._order)) {
                 sortedProducts = [...products].sort((a, b) => {
@@ -348,8 +245,14 @@ const Admin = {
                 });
             }
 
-            imagesGrid.innerHTML = sortedProducts.map(product => this.renderImageItem(product)).join('');
+            imagesGrid.innerHTML = sortedProducts.map((product, index) =>
+                this.renderImageItem(product, index, sortedProducts.length)
+            ).join('');
+
             this.attachImageEventListeners();
+            if (this.isReorderMode) {
+                this.attachReorderListeners();
+            }
 
         } catch (error) {
             console.error('Failed to load products:', error);
@@ -358,22 +261,30 @@ const Admin = {
     },
 
     /**
-     * Render an image item for admin
+     * Render an image item with reorder arrows
      */
-    renderImageItem(product) {
+    renderImageItem(product, index, total) {
         const displayName = this.metadata[product.name] || '';
         const isVideo = CONFIG.VIDEO_EXTENSIONS.some(ext =>
             product.name.toLowerCase().endsWith(`.${ext}`)
         );
+        const isFirst = index === 0;
+        const isLast = index === total - 1;
 
         return `
             <div class="image-item" data-filename="${product.name}" data-sha="${product.sha}">
-                <div class="drag-handle">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/>
-                        <circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/>
-                        <circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/>
-                    </svg>
+                <div class="reorder-arrows">
+                    <button class="move-up-btn ${isFirst ? 'disabled' : ''}" ${isFirst ? 'disabled' : ''} title="Move up">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                            <path d="M18 15l-6-6-6 6"/>
+                        </svg>
+                    </button>
+                    <span class="position-badge">${index + 1}</span>
+                    <button class="move-down-btn ${isLast ? 'disabled' : ''}" ${isLast ? 'disabled' : ''} title="Move down">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
                 </div>
                 <div class="image-preview">
                     ${isVideo
@@ -403,7 +314,6 @@ const Admin = {
     attachImageEventListeners() {
         const imagesGrid = document.getElementById('imagesGrid');
 
-        // Save buttons
         imagesGrid.querySelectorAll('.btn-save').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const imageItem = btn.closest('.image-item');
@@ -413,20 +323,18 @@ const Admin = {
             });
         });
 
-        // Delete buttons
         imagesGrid.querySelectorAll('.btn-delete').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const imageItem = btn.closest('.image-item');
                 const filename = imageItem.dataset.filename;
                 const sha = imageItem.dataset.sha;
 
-                if (confirm(`Delete "${filename}"? This cannot be undone.`)) {
+                if (confirm(`Delete "${filename}"?`)) {
                     await this.deleteImage(filename, sha, imageItem);
                 }
             });
         });
 
-        // Enter key to save
         imagesGrid.querySelectorAll('.image-name-input').forEach(input => {
             input.addEventListener('keydown', async (e) => {
                 if (e.key === 'Enter') {
@@ -439,9 +347,6 @@ const Admin = {
         });
     },
 
-    /**
-     * Save image display name
-     */
     async saveImageName(filename, displayName, btn) {
         const originalText = btn.textContent;
         btn.disabled = true;
@@ -457,19 +362,14 @@ const Admin = {
             await GitHubAPI.saveMetadata(this.metadata);
             App.showToast('Name saved!', 'success');
             App.metadata = { ...this.metadata };
-
         } catch (error) {
-            console.error('Failed to save name:', error);
-            App.showToast('Failed to save: ' + error.message, 'error');
+            App.showToast('Failed to save', 'error');
         }
 
         btn.disabled = false;
         btn.textContent = originalText;
     },
 
-    /**
-     * Delete an image
-     */
     async deleteImage(filename, sha, imageItem) {
         const deleteBtn = imageItem.querySelector('.btn-delete');
         deleteBtn.disabled = true;
@@ -480,31 +380,24 @@ const Admin = {
 
             this.products = this.products.filter(p => p.name !== filename);
             delete this.metadata[filename];
-
-            // Remove from order
             if (this.metadata._order) {
                 this.metadata._order = this.metadata._order.filter(n => n !== filename);
             }
 
             imageItem.style.opacity = '0';
             imageItem.style.transform = 'scale(0.8)';
-            imageItem.style.transition = 'all 0.3s ease';
             setTimeout(() => imageItem.remove(), 300);
 
             App.showToast('Image deleted', 'success');
             App.loadProducts();
 
         } catch (error) {
-            console.error('Failed to delete:', error);
-            App.showToast('Failed to delete: ' + error.message, 'error');
+            App.showToast('Failed to delete', 'error');
             deleteBtn.disabled = false;
             deleteBtn.textContent = 'Delete';
         }
     },
 
-    /**
-     * Handle file uploads
-     */
     async handleFiles(files) {
         if (!files || files.length === 0) return;
 
@@ -524,7 +417,6 @@ const Admin = {
                 completed++;
                 progressFill.style.width = `${Math.round((completed / totalFiles) * 100)}%`;
             } catch (error) {
-                console.error(`Failed to upload ${file.name}:`, error);
                 App.showToast(`Failed: ${file.name}`, 'error');
             }
         }
@@ -541,9 +433,6 @@ const Admin = {
         }
     },
 
-    /**
-     * Logout - clears session
-     */
     logout() {
         GitHubAPI.clearToken();
         this.showLogin();
