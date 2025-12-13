@@ -180,6 +180,9 @@ const App = {
             // Setup progressive image loading
             this.setupProgressiveLoading();
 
+            // Apply Trusted By visibility setting
+            this.applyTrustedByVisibility();
+
             // Attach event listeners
             productsGrid.querySelectorAll('.product-card').forEach((card, index) => {
                 card.addEventListener('click', (e) => {
@@ -223,6 +226,20 @@ const App = {
                 });
             }
         });
+    },
+
+    /**
+     * Apply Trusted By visibility from metadata
+     */
+    applyTrustedByVisibility() {
+        const trustedBySection = document.querySelector('.trusted-by');
+        if (trustedBySection && this.metadata) {
+            if (this.metadata._hideTrustedBy === true) {
+                trustedBySection.style.display = 'none';
+            } else {
+                trustedBySection.style.display = '';
+            }
+        }
     },
 
     /**

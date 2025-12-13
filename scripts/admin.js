@@ -1,13 +1,12 @@
 /**
  * Admin Panel Logic
- * Handles image management with debounced saves to prevent conflicts
+ * Handles image management with debounced saves
  */
 const Admin = {
     isInitialized: false,
     products: [],
     metadata: {},
     isReorderMode: false,
-    saveQueue: [],
     isSaving: false,
     saveDebounceTimer: null,
 
@@ -62,6 +61,30 @@ const Admin = {
         if (reorderToggle) {
             reorderToggle.addEventListener('click', () => this.toggleReorderMode());
         }
+
+        // Trusted By toggle
+        const trustedToggle = document.getElementById('trustedToggle');
+        if (trustedToggle) {
+            trustedToggle.addEventListener('click', () => this.toggleTrustedBy());
+        }
+    },
+
+    /**
+     * Toggle Trusted By section visibility
+     */
+    async toggleTrustedBy() {
+        const toggle = document.getElementById('trustedToggle');
+        const isHidden = this.metadata._hideTrustedBy === true;
+
+        this.metadata._hideTrustedBy = !isHidden;
+
+        toggle.innerHTML = this.metadata._hideTrustedBy
+            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/></svg><span>Show "Trusted By"</span>`
+            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><span>Hide "Trusted By"</span>`;
+
+        await this.saveMetadataToGitHub();
+        App.applyTrustedByVisibility();
+        App.showToast(this.metadata._hideTrustedBy ? 'Trusted By hidden' : 'Trusted By visible', 'success');
     },
 
     /**
@@ -86,9 +109,6 @@ const Admin = {
         }
     },
 
-    /**
-     * Attach reorder arrow button listeners
-     */
     attachReorderListeners() {
         const grid = document.getElementById('imagesGrid');
 
@@ -119,18 +139,12 @@ const Admin = {
         });
     },
 
-    /**
-     * Update position badges after reorder
-     */
     updatePositionBadges() {
         const items = document.querySelectorAll('.image-item');
         items.forEach((item, index) => {
             const badge = item.querySelector('.position-badge');
-            if (badge) {
-                badge.textContent = index + 1;
-            }
+            if (badge) badge.textContent = index + 1;
 
-            // Update button states
             const upBtn = item.querySelector('.move-up-btn');
             const downBtn = item.querySelector('.move-down-btn');
 
@@ -145,9 +159,6 @@ const Admin = {
         });
     },
 
-    /**
-     * Flash item to show it moved
-     */
     flashItem(item) {
         item.style.transform = 'scale(1.03)';
         item.style.boxShadow = '0 0 25px rgba(0, 180, 216, 0.6)';
@@ -157,26 +168,18 @@ const Admin = {
         }, 250);
     },
 
-    /**
-     * Debounced save to prevent conflicts
-     */
     debouncedSave(callback, delay = 1000) {
         clearTimeout(this.saveDebounceTimer);
         this.saveDebounceTimer = setTimeout(callback, delay);
     },
 
-    /**
-     * Save product order with debouncing
-     */
     async saveProductOrder() {
         const grid = document.getElementById('imagesGrid');
         const items = grid.querySelectorAll('.image-item');
         const order = [...items].map(item => item.dataset.filename);
 
-        // Update local metadata
         this.metadata._order = order;
 
-        // Debounced save
         this.debouncedSave(async () => {
             try {
                 await this.saveMetadataToGitHub();
@@ -189,12 +192,8 @@ const Admin = {
         }, 500);
     },
 
-    /**
-     * Queue-based metadata save to prevent conflicts
-     */
     async saveMetadataToGitHub() {
         if (this.isSaving) {
-            // Already saving, wait and retry
             return new Promise((resolve, reject) => {
                 setTimeout(async () => {
                     try {
@@ -215,9 +214,6 @@ const Admin = {
         }
     },
 
-    /**
-     * Check authentication status
-     */
     checkAuth() {
         GitHubAPI.init();
 
@@ -266,6 +262,16 @@ const Admin = {
     showManager() {
         document.getElementById('adminLogin').classList.add('hidden');
         document.getElementById('adminManager').classList.remove('hidden');
+        this.updateTrustedToggleState();
+    },
+
+    updateTrustedToggleState() {
+        const toggle = document.getElementById('trustedToggle');
+        if (toggle && this.metadata) {
+            toggle.innerHTML = this.metadata._hideTrustedBy
+                ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/></svg><span>Show "Trusted By"</span>`
+                : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg><span>Hide "Trusted By"</span>`;
+        }
     },
 
     async loadProducts() {
@@ -280,6 +286,7 @@ const Admin = {
 
             this.products = products;
             this.metadata = metadata;
+            this.updateTrustedToggleState();
 
             if (products.length === 0) {
                 imagesGrid.innerHTML = `
@@ -316,9 +323,6 @@ const Admin = {
         }
     },
 
-    /**
-     * Render image item with larger mobile-friendly reorder buttons
-     */
     renderImageItem(product, index, total) {
         const displayName = this.metadata[product.name] || '';
         const isVideo = CONFIG.VIDEO_EXTENSIONS.some(ext =>
@@ -356,7 +360,6 @@ const Admin = {
                         class="image-name-input" 
                         placeholder="${Lang.get('enterName')}"
                         value="${displayName}"
-                        data-i18n-placeholder="enterName"
                     >
                     <div class="image-actions">
                         <button class="btn-save">${Lang.get('save')}</button>
@@ -403,9 +406,6 @@ const Admin = {
         });
     },
 
-    /**
-     * Save image name with debouncing to prevent conflicts
-     */
     async saveImageName(filename, displayName, btn) {
         const originalText = btn.textContent;
         btn.disabled = true;
@@ -418,7 +418,6 @@ const Admin = {
                 delete this.metadata[filename];
             }
 
-            // Debounced save to prevent multiple rapid saves
             await this.saveMetadataToGitHub();
             App.showToast(Lang.get('nameSaved'), 'success');
             App.metadata = { ...this.metadata };
@@ -458,8 +457,13 @@ const Admin = {
         }
     },
 
+    /**
+     * Handle multiple file uploads - FIXED for multiple images
+     */
     async handleFiles(files) {
         if (!files || files.length === 0) return;
+
+        const filesArray = Array.from(files);
 
         const uploadProgress = document.getElementById('uploadProgress');
         const progressFill = document.getElementById('progressFill');
@@ -467,19 +471,30 @@ const Admin = {
 
         uploadProgress.classList.remove('hidden');
 
-        const totalFiles = files.length;
+        const totalFiles = filesArray.length;
         let completed = 0;
+        let failed = 0;
 
-        for (const file of files) {
+        // Upload files sequentially to avoid conflicts
+        for (const file of filesArray) {
             try {
-                progressText.textContent = `Uploading ${file.name}...`;
+                progressText.textContent = `Uploading ${file.name} (${completed + 1}/${totalFiles})...`;
                 await GitHubAPI.uploadImage(file);
                 completed++;
                 progressFill.style.width = `${Math.round((completed / totalFiles) * 100)}%`;
+
+                // Small delay between uploads to prevent API rate limits
+                if (completed < totalFiles) {
+                    await new Promise(r => setTimeout(r, 300));
+                }
             } catch (error) {
+                console.error(`Failed to upload ${file.name}:`, error);
+                failed++;
                 App.showToast(`Failed: ${file.name}`, 'error');
             }
         }
+
+        progressText.textContent = 'Complete!';
 
         setTimeout(() => {
             uploadProgress.classList.add('hidden');
@@ -488,8 +503,9 @@ const Admin = {
 
         if (completed > 0) {
             App.showToast(`Uploaded ${completed} file${completed > 1 ? 's' : ''}!`, 'success');
+            // Refresh BOTH admin and public views
             await this.loadProducts();
-            App.loadProducts();
+            await App.loadProducts();
         }
     },
 

@@ -411,6 +411,8 @@ textarea {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+    padding: 0 var(--space-2);
+    margin: 0 calc(-1 * var(--space-2));
 }
 
 .hero-subtitle {
@@ -430,6 +432,7 @@ textarea {
 /* Phone Number */
 .hero-phone {
     margin-top: var(--space-4);
+    margin-bottom: var(--space-10);
     font-size: var(--font-size-lg);
     font-weight: 600;
     color: var(--gray-600);
@@ -497,10 +500,7 @@ textarea {
 
 /* --- Scroll Indicator --- */
 .hero-scroll {
-    position: absolute;
-    bottom: var(--space-8);
-    left: 50%;
-    transform: translateX(-50%);
+    margin-top: var(--space-6);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -514,11 +514,11 @@ textarea {
 
     0%,
     100% {
-        transform: translateX(-50%) translateY(0);
+        transform: translateY(0);
     }
 
     50% {
-        transform: translateX(-50%) translateY(-8px);
+        transform: translateY(-8px);
     }
 }
 
@@ -1473,8 +1473,36 @@ textarea {
 /* Admin Toolbar */
 .admin-toolbar {
     display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
     justify-content: flex-end;
     margin-bottom: var(--space-4);
+}
+
+.btn-trusted {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--gray-100);
+    border: 2px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--gray-700);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-trusted svg {
+    width: 18px;
+    height: 18px;
+}
+
+.btn-trusted:hover {
+    background: var(--accent-50);
+    border-color: var(--accent-300);
+    color: var(--accent-700);
 }
 
 .btn-reorder {
