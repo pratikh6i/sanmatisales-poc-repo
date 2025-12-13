@@ -11,6 +11,9 @@ const App = {
      * Initialize the application
      */
     async init() {
+        // Initialize language system
+        Lang.init();
+
         this.setupEventListeners();
         this.setupScrollEffects();
         this.loadCustomerLogo();
@@ -82,6 +85,14 @@ const App = {
                 this.openWhatsApp(this.currentProduct.displayName, this.currentProduct.rawUrl);
             }
         });
+
+        // Language toggle button
+        const langToggle = document.getElementById('langToggle');
+        if (langToggle) {
+            langToggle.addEventListener('click', () => {
+                Lang.toggle();
+            });
+        }
     },
 
     /**

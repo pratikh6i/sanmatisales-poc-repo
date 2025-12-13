@@ -1,13 +1,15 @@
 /**
  * Admin Panel Logic
- * Handles image management with session persistence and easy reordering
+ * Handles image management with debounced saves to prevent conflicts
  */
 const Admin = {
     isInitialized: false,
     products: [],
     metadata: {},
-    productOrder: [],
     isReorderMode: false,
+    saveQueue: [],
+    isSaving: false,
+    saveDebounceTimer: null,
 
     /**
      * Initialize admin panel
@@ -24,16 +26,13 @@ const Admin = {
      * Setup event listeners
      */
     setupEventListeners() {
-        // Logout button
         document.getElementById('adminLogout').addEventListener('click', () => this.logout());
 
-        // Login form
         document.getElementById('loginForm').addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleLogin();
         });
 
-        // Upload zone
         const uploadZone = document.getElementById('uploadZone');
         const fileInput = document.getElementById('fileInput');
 
@@ -59,7 +58,6 @@ const Admin = {
             fileInput.value = '';
         });
 
-        // Reorder toggle button
         const reorderToggle = document.getElementById('reorderToggle');
         if (reorderToggle) {
             reorderToggle.addEventListener('click', () => this.toggleReorderMode());
@@ -76,13 +74,13 @@ const Admin = {
 
         if (this.isReorderMode) {
             toggle.classList.add('active');
-            toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>Save Order</span>`;
+            toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span>${Lang.get('saveOrder')}</span>`;
             imagesGrid.classList.add('reorder-mode');
             this.attachReorderListeners();
-            App.showToast('Use arrows to reorder. Tap "Save Order" when done.', 'success');
+            App.showToast(Lang.get('useArrows'), 'success');
         } else {
             toggle.classList.remove('active');
-            toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span>Reorder Images</span>`;
+            toggle.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span>${Lang.get('reorderImages')}</span>`;
             imagesGrid.classList.remove('reorder-mode');
             this.saveProductOrder();
         }
@@ -94,7 +92,6 @@ const Admin = {
     attachReorderListeners() {
         const grid = document.getElementById('imagesGrid');
 
-        // Move up buttons
         grid.querySelectorAll('.move-up-btn').forEach(btn => {
             btn.onclick = (e) => {
                 e.stopPropagation();
@@ -103,11 +100,11 @@ const Admin = {
                 if (prev) {
                     item.parentNode.insertBefore(item, prev);
                     this.flashItem(item);
+                    this.updatePositionBadges();
                 }
             };
         });
 
-        // Move down buttons
         grid.querySelectorAll('.move-down-btn').forEach(btn => {
             btn.onclick = (e) => {
                 e.stopPropagation();
@@ -116,8 +113,35 @@ const Admin = {
                 if (next) {
                     item.parentNode.insertBefore(next, item);
                     this.flashItem(item);
+                    this.updatePositionBadges();
                 }
             };
+        });
+    },
+
+    /**
+     * Update position badges after reorder
+     */
+    updatePositionBadges() {
+        const items = document.querySelectorAll('.image-item');
+        items.forEach((item, index) => {
+            const badge = item.querySelector('.position-badge');
+            if (badge) {
+                badge.textContent = index + 1;
+            }
+
+            // Update button states
+            const upBtn = item.querySelector('.move-up-btn');
+            const downBtn = item.querySelector('.move-down-btn');
+
+            if (upBtn) {
+                upBtn.disabled = index === 0;
+                upBtn.classList.toggle('disabled', index === 0);
+            }
+            if (downBtn) {
+                downBtn.disabled = index === items.length - 1;
+                downBtn.classList.toggle('disabled', index === items.length - 1);
+            }
         });
     },
 
@@ -125,30 +149,69 @@ const Admin = {
      * Flash item to show it moved
      */
     flashItem(item) {
-        item.style.transform = 'scale(1.02)';
-        item.style.boxShadow = '0 0 20px rgba(0, 180, 216, 0.5)';
+        item.style.transform = 'scale(1.03)';
+        item.style.boxShadow = '0 0 25px rgba(0, 180, 216, 0.6)';
         setTimeout(() => {
             item.style.transform = '';
             item.style.boxShadow = '';
-        }, 200);
+        }, 250);
     },
 
     /**
-     * Save product order to metadata
+     * Debounced save to prevent conflicts
+     */
+    debouncedSave(callback, delay = 1000) {
+        clearTimeout(this.saveDebounceTimer);
+        this.saveDebounceTimer = setTimeout(callback, delay);
+    },
+
+    /**
+     * Save product order with debouncing
      */
     async saveProductOrder() {
         const grid = document.getElementById('imagesGrid');
         const items = grid.querySelectorAll('.image-item');
         const order = [...items].map(item => item.dataset.filename);
 
+        // Update local metadata
+        this.metadata._order = order;
+
+        // Debounced save
+        this.debouncedSave(async () => {
+            try {
+                await this.saveMetadataToGitHub();
+                App.showToast(Lang.get('orderSaved'), 'success');
+                App.loadProducts();
+            } catch (error) {
+                console.error('Failed to save order:', error);
+                App.showToast('Failed to save order', 'error');
+            }
+        }, 500);
+    },
+
+    /**
+     * Queue-based metadata save to prevent conflicts
+     */
+    async saveMetadataToGitHub() {
+        if (this.isSaving) {
+            // Already saving, wait and retry
+            return new Promise((resolve, reject) => {
+                setTimeout(async () => {
+                    try {
+                        await this.saveMetadataToGitHub();
+                        resolve();
+                    } catch (e) {
+                        reject(e);
+                    }
+                }, 1500);
+            });
+        }
+
+        this.isSaving = true;
         try {
-            this.metadata._order = order;
             await GitHubAPI.saveMetadata(this.metadata);
-            App.showToast('Order saved!', 'success');
-            App.loadProducts();
-        } catch (error) {
-            console.error('Failed to save order:', error);
-            App.showToast('Failed to save order', 'error');
+        } finally {
+            this.isSaving = false;
         }
     },
 
@@ -166,9 +229,6 @@ const Admin = {
         }
     },
 
-    /**
-     * Handle login form submission
-     */
     async handleLogin() {
         const tokenInput = document.getElementById('githubToken');
         const token = tokenInput.value.trim();
@@ -188,13 +248,13 @@ const Admin = {
             GitHubAPI.setToken(token);
             this.showManager();
             await this.loadProducts();
-            App.showToast('Login successful!', 'success');
+            App.showToast(Lang.get('loginSuccess'), 'success');
         } else {
             App.showToast('Invalid token or no repo access', 'error');
         }
 
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<span>Login</span>';
+        submitBtn.innerHTML = `<span>${Lang.get('login')}</span>`;
         tokenInput.value = '';
     },
 
@@ -208,12 +268,9 @@ const Admin = {
         document.getElementById('adminManager').classList.remove('hidden');
     },
 
-    /**
-     * Load products in admin view
-     */
     async loadProducts() {
         const imagesGrid = document.getElementById('imagesGrid');
-        imagesGrid.innerHTML = '<div class="loading-state"><div class="loader"><div class="loader-ring"></div><div class="loader-ring"></div></div><p>Loading images...</p></div>';
+        imagesGrid.innerHTML = '<div class="loading-state"><div class="loader"><div class="loader-ring"></div><div class="loader-ring"></div></div><p>Loading...</p></div>';
 
         try {
             const [products, metadata] = await Promise.all([
@@ -233,7 +290,6 @@ const Admin = {
                 return;
             }
 
-            // Sort by saved order
             let sortedProducts = products;
             if (metadata._order && Array.isArray(metadata._order)) {
                 sortedProducts = [...products].sort((a, b) => {
@@ -261,7 +317,7 @@ const Admin = {
     },
 
     /**
-     * Render an image item with reorder arrows
+     * Render image item with larger mobile-friendly reorder buttons
      */
     renderImageItem(product, index, total) {
         const displayName = this.metadata[product.name] || '';
@@ -273,17 +329,19 @@ const Admin = {
 
         return `
             <div class="image-item" data-filename="${product.name}" data-sha="${product.sha}">
-                <div class="reorder-arrows">
-                    <button class="move-up-btn ${isFirst ? 'disabled' : ''}" ${isFirst ? 'disabled' : ''} title="Move up">
+                <div class="reorder-controls">
+                    <button class="reorder-btn move-up-btn ${isFirst ? 'disabled' : ''}" ${isFirst ? 'disabled' : ''}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                             <path d="M18 15l-6-6-6 6"/>
                         </svg>
+                        <span>Up</span>
                     </button>
                     <span class="position-badge">${index + 1}</span>
-                    <button class="move-down-btn ${isLast ? 'disabled' : ''}" ${isLast ? 'disabled' : ''} title="Move down">
+                    <button class="reorder-btn move-down-btn ${isLast ? 'disabled' : ''}" ${isLast ? 'disabled' : ''}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                             <path d="M6 9l6 6 6-6"/>
                         </svg>
+                        <span>Down</span>
                     </button>
                 </div>
                 <div class="image-preview">
@@ -296,21 +354,19 @@ const Admin = {
                     <input 
                         type="text" 
                         class="image-name-input" 
-                        placeholder="Enter display name..."
+                        placeholder="${Lang.get('enterName')}"
                         value="${displayName}"
+                        data-i18n-placeholder="enterName"
                     >
                     <div class="image-actions">
-                        <button class="btn-save" title="Save name">Save</button>
-                        <button class="btn-delete" title="Delete">Delete</button>
+                        <button class="btn-save">${Lang.get('save')}</button>
+                        <button class="btn-delete">${Lang.get('delete')}</button>
                     </div>
                 </div>
             </div>
         `;
     },
 
-    /**
-     * Attach event listeners to image items
-     */
     attachImageEventListeners() {
         const imagesGrid = document.getElementById('imagesGrid');
 
@@ -347,6 +403,9 @@ const Admin = {
         });
     },
 
+    /**
+     * Save image name with debouncing to prevent conflicts
+     */
     async saveImageName(filename, displayName, btn) {
         const originalText = btn.textContent;
         btn.disabled = true;
@@ -359,11 +418,12 @@ const Admin = {
                 delete this.metadata[filename];
             }
 
-            await GitHubAPI.saveMetadata(this.metadata);
-            App.showToast('Name saved!', 'success');
+            // Debounced save to prevent multiple rapid saves
+            await this.saveMetadataToGitHub();
+            App.showToast(Lang.get('nameSaved'), 'success');
             App.metadata = { ...this.metadata };
         } catch (error) {
-            App.showToast('Failed to save', 'error');
+            App.showToast('Failed to save - please try again', 'error');
         }
 
         btn.disabled = false;
@@ -388,13 +448,13 @@ const Admin = {
             imageItem.style.transform = 'scale(0.8)';
             setTimeout(() => imageItem.remove(), 300);
 
-            App.showToast('Image deleted', 'success');
+            App.showToast(Lang.get('imageDeleted'), 'success');
             App.loadProducts();
 
         } catch (error) {
             App.showToast('Failed to delete', 'error');
             deleteBtn.disabled = false;
-            deleteBtn.textContent = 'Delete';
+            deleteBtn.textContent = Lang.get('delete');
         }
     },
 
@@ -437,6 +497,6 @@ const Admin = {
         GitHubAPI.clearToken();
         this.showLogin();
         App.closeAdminPanel();
-        App.showToast('Logged out', 'success');
+        App.showToast(Lang.get('loggedOut'), 'success');
     },
 };
