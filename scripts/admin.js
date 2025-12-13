@@ -9,6 +9,7 @@ const Admin = {
     isReorderMode: false,
     isSaving: false,
     saveDebounceTimer: null,
+    isUploadCancelled: false,
 
     /**
      * Initialize admin panel
@@ -66,6 +67,15 @@ const Admin = {
         const trustedToggle = document.getElementById('trustedToggle');
         if (trustedToggle) {
             trustedToggle.addEventListener('click', () => this.toggleTrustedBy());
+        }
+
+        // Cancel upload button
+        const cancelBtn = document.getElementById('cancelUpload');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => {
+                this.isUploadCancelled = true;
+                App.showToast('Upload cancelled', 'error');
+            });
         }
     },
 
@@ -470,6 +480,7 @@ const Admin = {
         const progressText = document.getElementById('progressText');
 
         uploadProgress.classList.remove('hidden');
+        this.isUploadCancelled = false; // Reset cancel flag
 
         const totalFiles = filesArray.length;
         let completed = 0;
@@ -477,6 +488,12 @@ const Admin = {
 
         // Upload files sequentially to avoid conflicts
         for (const file of filesArray) {
+            // Check if cancelled
+            if (this.isUploadCancelled) {
+                progressText.textContent = 'Cancelled';
+                break;
+            }
+
             try {
                 progressText.textContent = `Uploading ${file.name} (${completed + 1}/${totalFiles})...`;
                 await GitHubAPI.uploadImage(file);
@@ -494,11 +511,14 @@ const Admin = {
             }
         }
 
-        progressText.textContent = 'Complete!';
+        if (!this.isUploadCancelled) {
+            progressText.textContent = 'Complete!';
+        }
 
         setTimeout(() => {
             uploadProgress.classList.add('hidden');
             progressFill.style.width = '0%';
+            this.isUploadCancelled = false;
         }, 1000);
 
         if (completed > 0) {

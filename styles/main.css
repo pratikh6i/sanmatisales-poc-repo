@@ -1403,6 +1403,29 @@ textarea {
     text-align: center;
 }
 
+.btn-cancel {
+    margin-top: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    background: var(--error);
+    color: var(--white);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-cancel svg {
+    width: 16px;
+    height: 16px;
+}
+
+.btn-cancel:hover {
+    background: #c0392b;
+    transform: scale(1.05);
+}
+
 /* Images Grid */
 .images-grid {
     display: grid;
